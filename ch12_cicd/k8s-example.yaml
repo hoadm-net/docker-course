@@ -1,0 +1,37 @@
+# Chapter 12 - the same API as Kubernetes objects (reference only).
+#   kubectl apply -f k8s-example.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vietmart-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: vietmart-api}
+  template:
+    metadata:
+      labels: {app: vietmart-api}
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/OWNER/vietmart-api:1.1.0
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+          resources:
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vietmart-api
+spec:
+  selector: {app: vietmart-api}
+  ports:
+    - port: 80
+      targetPort: 8000
