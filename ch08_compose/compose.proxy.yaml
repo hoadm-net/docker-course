@@ -1,0 +1,16 @@
+# Chapter 8 (exercise 8.3) - override file: put Nginx in front and scale the API.
+#   docker compose -f compose.yaml -f compose.proxy.yaml up -d --build --scale api=3
+services:
+  api:
+    ports: !reset []        # replicas cannot all bind host port 8000
+    expose:
+      - "8000"
+
+  web:
+    image: nginx:1.28-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api

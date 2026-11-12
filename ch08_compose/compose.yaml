@@ -1,0 +1,48 @@
+# Chapter 8 - VietMart Catalog as a multi-container application.
+#   cd ch08_compose && cp .env.example .env && docker compose up -d --build
+name: vietmart
+
+services:
+  api:
+    build:
+      context: ../app-v2
+      args:
+        APP_VERSION: "2.0"
+    image: vietmart-api:2.0
+    environment:
+      DB_HOST: db                 # service names are DNS names on the project network
+      DB_NAME: vietmart
+      DB_USER: vietmart
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      REDIS_HOST: redis
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy    # wait until PostgreSQL accepts connections
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: vietmart
+      POSTGRES_USER: vietmart
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ../app-v2/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vietmart -d vietmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    volumes:
+      - redis-data:/data
+
+volumes:
+  db-data:
+  redis-data:

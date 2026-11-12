@@ -1,0 +1,20 @@
+# Chapter 8 (exercise 8.4) - development override: live sync and an optional DB admin UI.
+#   docker compose -f compose.yaml -f compose.dev.yaml watch
+#   docker compose -f compose.yaml -f compose.dev.yaml --profile tools up -d
+services:
+  api:
+    develop:
+      watch:
+        - action: sync+restart        # copy changed files into the container, then restart it
+          path: ../app-v2/src
+          target: /app
+        - action: rebuild             # dependencies changed: rebuild the image
+          path: ../app-v2/requirements.txt
+
+  adminer:
+    image: adminer:5
+    profiles: ["tools"]               # started only with --profile tools
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
