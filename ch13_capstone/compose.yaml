@@ -1,0 +1,112 @@
+# Chapter 13 - capstone: the complete VietMart stack, production-style.
+#   cd ch13_capstone
+#   cp .env.example .env && cp secrets/db_password.txt.example secrets/db_password.txt
+#   docker compose up -d --build --scale api=2
+name: vietmart-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  web:
+    image: nginx:1.28-alpine
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [frontend]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  api:
+    <<: *hardening
+    build:
+      context: ../app-v2
+      args:
+        APP_VERSION: "2.0"
+    image: ${API_IMAGE:-vietmart-api:2.0}
+    environment:
+      DB_HOST: db
+      DB_NAME: vietmart
+      DB_USER: vietmart
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      REDIS_HOST: redis
+    secrets: [db_password]
+    tmpfs: [/tmp]
+    expose: ["8000"]                 # reachable only through the web service
+    networks: [frontend, backend]
+    healthcheck:                     # overrides the interval baked into the image
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: vietmart
+      POSTGRES_USER: vietmart
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ../app-v2/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vietmart -d vietmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]     # persist the counter
+    volumes:
+      - redis-data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  frontend:
+  backend:
+    internal: true        # no route to the outside world: only api can reach db and redis
+
+volumes:
+  db-data:
+  redis-data:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
