@@ -1,0 +1,4 @@
+# Chapter 4 (exercise 4.4) - ENTRYPOINT + CMD: arguments to `docker run` replace only CMD.
+FROM alpine:3
+ENTRYPOINT ["echo", "hello"]
+CMD ["from the default CMD"]

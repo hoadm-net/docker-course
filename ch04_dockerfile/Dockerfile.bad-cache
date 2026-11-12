@@ -1,0 +1,10 @@
+# Chapter 4 (exercise 4.3) - same result, cache-unfriendly instruction order.
+# Any change to the source code invalidates the COPY layer and forces pip install to run again.
+FROM python:3.13-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+ENV APP_VERSION=1.0 \
+    DATA_DIR=/data
+EXPOSE 8000
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--chdir", "src", "app:app"]
