@@ -1,0 +1,62 @@
+# Chapter 10 - the Compose stack with secrets and a hardened API container.
+#   cd ch10_security && cp secrets/db_password.txt.example secrets/db_password.txt
+#   docker compose up -d --build
+name: vietmart-secure
+
+services:
+  api:
+    build:
+      context: ../app-v2
+      args:
+        APP_VERSION: "2.0"
+    image: vietmart-api:2.0
+    environment:
+      DB_HOST: db
+      DB_NAME: vietmart
+      DB_USER: vietmart
+      DB_PASSWORD_FILE: /run/secrets/db_password    # the app reads the file, not an env var
+      REDIS_HOST: redis
+    secrets:
+      - db_password
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true                 # root filesystem is immutable
+    tmpfs:
+      - /tmp                        # gunicorn needs a writable temp directory
+    cap_drop:
+      - ALL                         # the app needs no Linux capabilities
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: vietmart
+      POSTGRES_USER: vietmart
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ../app-v2/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vietmart -d vietmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt   # must be readable by UID 10001 (chmod 644 on a dev machine)
+
+volumes:
+  db-data:
